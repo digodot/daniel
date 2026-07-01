@@ -11,17 +11,44 @@
   <!-- Lucide Icons para os Ícones da Interface -->
   <script src="https://unpkg.com/lucide@latest"></script>
   
-  <!-- ─── INTEGRANDO MAPBOX GL JS ─── -->
-  <link href="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.css" rel="stylesheet">
-  <script src="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.js"></script>
+  <!-- ─── INTEGRANDO OPENLAYERS (OPÇÃO 3 - 100% GRATUITO E SEM CHAVE) ─── -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v8.2.0/ol.css">
+  <script src="https://cdn.jsdelivr.net/npm/ol@v8.2.0/dist/ol.js"></script>
   
   <style>
-    /* Customização do Pop-up do Mapbox para combinar com o site */
-    .mapboxgl-popup-content {
-      border-radius: 12px;
-      padding: 12px;
-      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-      font-family: sans-serif;
+    /* Estilo para ajustar os botões de controle do OpenLayers */
+    .ol-control button {
+      background-color: #2563eb !important;
+      color: white !important;
+      border-radius: 6px !important;
+    }
+    /* Estilo simples para o pop-up do mapa */
+    .ol-popup {
+      position: absolute;
+      background-color: white;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid #cccccc;
+      bottom: 12px;
+      left: -50px;
+      min-width: 180px;
+      font-size: 12px;
+    }
+    .ol-popup:after, .ol-popup:before {
+      top: 100%;
+      border: solid transparent;
+      content: " ";
+      height: 0;
+      width: 0;
+      position: absolute;
+      pointer-events: none;
+    }
+    .ol-popup:after {
+      border-top-color: white;
+      border-width: 10px;
+      left: 48px;
+      margin-left: -10px;
     }
   </style>
 </head>
@@ -99,17 +126,22 @@
       </div>
     </section>
 
-    <!-- 2. NOVO MAPBOX INTERATIVO -->
+    <!-- 2. NOVO MAPA ESTÁVEL COM OPENLAYERS -->
     <section class="bg-white rounded-2xl p-4 border border-slate-100 shadow-xs space-y-3">
       <div class="flex items-center justify-between">
         <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
-          <i data-lucide="map" class="w-4 h-4 text-blue-600"></i> Mapa de Riscos Premium (Mapbox)
+          <i data-lucide="map" class="w-4 h-4 text-blue-600"></i> Mapa de Riscos Sem Chave (OpenLayers)
         </h3>
         <span class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">Histórico</span>
       </div>
       
       <!-- Container do Mapa -->
       <div id="incidentMap" class="w-full h-64 rounded-xl border border-slate-100 overflow-hidden shadow-inner"></div>
+      
+      <!-- Pop-up invisível do mapa que aparece ao clicar -->
+      <div id="popup" class="ol-popup">
+        <div id="popup-content"></div>
+      </div>
       
       <div class="flex justify-start gap-4 text-[11px] font-semibold text-slate-500 px-1">
         <div class="flex items-center gap-1">
@@ -121,7 +153,7 @@
       </div>
     </section>
 
-    <!-- 3. GRÁFICO DA ONDA DA MARÉ -->
+    <!-- 3. GRÁFICO DA ONDA DA MARÉ CORRIGIDO -->
     <section class="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs">
       <div class="flex items-center justify-between mb-3">
         <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
@@ -129,7 +161,7 @@
         </h3>
         <span id="currentHeightTag" class="text-xs font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-sm">--</span>
       </div>
-      <div class="w-full h-40 relative">
+      <div class="w-full h-44 relative">
         <canvas id="tideChart"></canvas>
       </div>
     </section>
@@ -165,225 +197,273 @@
 
   <!-- LÓGICA JAVASCRIPT -->
   <script>
-    lucide.createIcons();
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
 
-    // Token padrão de teste público do Mapbox (Troque pelo seu futuramente no painel do Mapbox)
-    mapboxgl.accessToken = 'pk.eyJ1IjoiZmFicmljaW90ZXN0ZSIsImEiOiJjbHN0N3NtcmswM3RjMnFwOTN6M29pM3A0In0.X9O8K28U6g2bF8_8-7Vl_A';
+      const beachData = {
+        'boa-viagem': { coords: [-34.8931, -8.1130], name: 'Boa Viagem (Acaiaca)', status: 'atencao', title: 'Maré Enchendo Agora', desc: 'A água está cobrindo a linha de arrecifes. Evite o banho nas valas abertas e retorne para a areia.', nextEvent: 'Alta: 15:42 (2.2m)', sharkRisk: 'Alto', currentHeight: '1.4m' },
+        'piedade': { coords: [-34.9157, -8.1678], name: 'Piedade (Igrejinha)', status: 'perigo', title: 'Área com Banho Restrito', desc: 'Risco crítico de incidentes com tubarões e fortes correntes de retorno. O banho profundo é proibido por decreto neste trecho.', nextEvent: 'Alta: 15:40 (2.2m)', sharkRisk: 'Extremo', currentHeight: '1.4m' },
+        'olinda': { coords: [-34.8422, -7.9892], name: 'Olinda (Casa Caiada)', status: 'seguro', title: 'Maré Baixa Estabilizada', desc: 'Condições ideais para caminhadas na faixa de areia. Água rasa perto da costa, evite entulhos.', nextEvent: 'Baixa: 21:50 (0.3m)', sharkRisk: 'Baixo', currentHeight: '0.4m' },
+        'paiva': { coords: [-34.9452, -8.2323], name: 'Cabo (Praia do Paiva)', status: 'atencao', title: 'Mar Aberto e Ondas Fortes', desc: 'Praia sem proteção de arrecifes. Correntes de repuxo intensas exigem cuidado redobrado de banhistas.', nextEvent: 'Alta: 15:45 (2.1m)', sharkRisk: 'Moderado', currentHeight: '1.3m' }
+      };
 
-    const beachData = {
-      'boa-viagem': { coords: [-34.8931, -8.1130], name: 'Boa Viagem (Acaiaca)', status: 'atencao', title: 'Maré Enchendo Agora', desc: 'A água está cobrindo a linha de arrecifes. Evite o banho nas valas abertas e retorne para a areia.', nextEvent: 'Alta: 15:42 (2.2m)', sharkRisk: 'Alto', currentHeight: '1.4m' },
-      'piedade': { coords: [-34.9157, -8.1678], name: 'Piedade (Igrejinha)', status: 'perigo', title: 'Área com Banho Restrito', desc: 'Risco crítico de incidentes com tubarões e fortes correntes de retorno. O banho profundo é proibido por decreto neste trecho.', nextEvent: 'Alta: 15:40 (2.2m)', sharkRisk: 'Extremo', currentHeight: '1.4m' },
-      'olinda': { coords: [-34.8422, -7.9892], name: 'Olinda (Casa Caiada)', status: 'seguro', title: 'Maré Baixa Estabilizada', desc: 'Condições ideais para caminhadas na faixa de areia. Água rasa perto da costa, evite entulhos.', nextEvent: 'Baixa: 21:50 (0.3m)', sharkRisk: 'Baixo', currentHeight: '0.4m' },
-      'paiva': { coords: [-34.9452, -8.2323], name: 'Cabo (Praia do Paiva)', status: 'atencao', title: 'Mar Aberto e Ondas Fortes', desc: 'Praia sem proteção de arrecifes. Correntes de repuxo intensas exigem cuidado redobrado de banhistas.', nextEvent: 'Alta: 15:45 (2.1m)', sharkRisk: 'Moderado', currentHeight: '1.3m' }
-    };
+      const incidentPoints = [
+        { lng: -34.8943, lat: -8.1172, type: 'shark', text: '<b>Incidente com Tubarão</b><br>Trecho do Edifício Acaiaca.' },
+        { lng: -34.9161, lat: -8.1685, type: 'shark', text: '<b>Incidente Crítico (Tubarão)</b><br>Entorno da Igrejinha de Piedade.' },
+        { lng: -34.8878, lat: -8.1025, type: 'afogamento', text: '<b>Alerta de Afogamento</b><br>Posto 4 de Boa Viagem.' }
+      ];
 
-    const incidentPoints = [
-      { lng: -34.8943, lat: -8.1172, type: 'shark', text: '<b>Incidente com Tubarão</b><br>Trecho do Edifício Acaiaca.' },
-      { lng: -34.9161, lat: -8.1685, type: 'shark', text: '<b>Incidente Crítico (Tubarão)</b><br>Entorno da Igrejinha de Piedade.' },
-      { lng: -34.8878, lat: -8.1025, type: 'afogamento', text: '<b>Alerta de Afogamento</b><br>Posto 4 de Boa Viagem.' }
-    ];
+      let tideChart = null;
+      let map = null;
+      let vectorSource = null;
+      let userFeature = null;
 
-    let tideChart = null;
-    let map = null;
-    let userMarker = null;
-
-    // ─── INICIALIZANDO O MAPBOX ───
-    function initMap() {
-      map = new mapboxgl.Map({
-        container: 'incidentMap',
-        style: 'mapbox://styles/mapbox/navigation-guidance-day-v4', // Estilo limpo e moderno focado em orlas
-        center: [-34.9000, -8.1200], // Recife [lng, lat] (Atenção: Mapbox usa longitude primeiro!)
-        zoom: 11,
-        attributionControl: false
+      // Elementos do Popup do OpenLayers
+      const popupContainer = document.getElementById('popup');
+      const popupContent = document.getElementById('popup-content');
+      const overlay = new ol.Overlay({
+        element: popupContainer,
+        autoPan: { animation: { duration: 250 } }
       });
 
-      // Renderizando Marcadores Customizados no Mapbox
-      incidentPoints.forEach(point => {
-        const color = point.type === 'shark' ? '#dc2626' : '#d97706';
-        
-        // Criando elemento HTML visual para o marcador
-        const el = document.createElement('div');
-        el.style.width = '14px';
-        el.style.height = '14px';
-        el.style.backgroundColor = color;
-        el.style.borderRadius = '50%';
-        el.style.border = '2px solid white';
-        el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+      // ─── INICIALIZANDO MAPA OPENLAYERS (100% ESTÁVEL E INDEPENDENTE) ───
+      function initMap() {
+        vectorSource = new ol.source.Vector();
 
-        // Instanciando o pop-up descritivo
-        const popup = new mapboxgl.Popup({ offset: 10 })
-          .setHTML(`<div class="text-xs text-slate-700 font-sans">${point.text}</div>`);
+        // Adicionando pontos históricos no mapa
+        incidentPoints.forEach(point => {
+          const feature = new ol.Feature({
+            geometry: new ol.geom.Point(ol.proj.fromLonLat([point.lng, point.lat])),
+            text: point.text
+          });
 
-        // Adicionando ao mapa
-        new mapboxgl.Marker(el)
-          .setLngLat([point.lng, point.lat])
-          .setPopup(popup)
-          .addTo(map);
-      });
-    }
+          // Definição das cores dos pinos
+          const color = point.type === 'shark' ? '#dc2626' : '#d97706';
+          feature.setStyle(new ol.style.Style({
+            image: new ol.style.Circle({
+              radius: 7,
+              fill: new ol.style.Fill({ color: color }),
+              stroke: new ol.style.Stroke({ color: '#ffffff', width: 2 })
+            })
+          }));
+          vectorSource.addFeature(feature);
+        });
 
-    function updateDashboard(beachKey) {
-      const data = beachData[beachKey];
-      document.getElementById('statusTitle').innerText = data.title;
-      document.getElementById('statusDescription').innerText = data.desc;
-      document.getElementById('nextTide').innerText = data.nextEvent;
-      document.getElementById('sharkRiskText').innerText = data.sharkRisk;
-      document.getElementById('currentHeightTag').innerText = `Altura: ${data.currentHeight}`;
+        const vectorLayer = new ol.layer.Vector({ source: vectorSource });
 
-      const card = document.getElementById('statusCard');
-      const tag = document.getElementById('statusTag');
-      const sharkText = document.getElementById('sharkRiskText');
-      const sharkIconBox = document.getElementById('sharkIconContainer');
+        map = new ol.Map({
+          target: 'incidentMap',
+          layers: [
+            new ol.layer.Tile({ source: new ol.source.OSM() }), // Mapa base público do OpenStreetMap
+            vectorLayer
+          ],
+          overlays: [overlay],
+          view: new ol.View({
+            center: ol.proj.fromLonLat([-34.9000, -8.1200]), // Recife
+            zoom: 11
+          })
+        });
 
-      card.className = "rounded-2xl p-5 border transition-all duration-300 shadow-xs ";
-      tag.className = "text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-md ";
-
-      if (data.status === 'seguro') {
-        card.classList.add('bg-emerald-50', 'border-emerald-200');
-        tag.classList.add('bg-emerald-500', 'text-white');
-        tag.innerText = '✓ Seguro com Cuidado';
-        sharkText.className = "font-bold text-base block mt-0.5 text-emerald-600";
-        sharkIconBox.className = "p-2 rounded-lg bg-emerald-100 text-emerald-600";
-      } else if (data.status === 'atencao') {
-        card.classList.add('bg-amber-50', 'border-amber-200');
-        tag.classList.add('bg-amber-500', 'text-white');
-        tag.innerText = '⚠️ Atenção Redobrada';
-        sharkText.className = "font-bold text-base block mt-0.5 text-amber-600";
-        sharkIconBox.className = "p-2 rounded-lg bg-amber-100 text-amber-600";
-      } else if (data.status === 'perigo') {
-        card.classList.add('bg-red-50', 'border-red-200');
-        tag.classList.add('bg-red-500', 'text-white');
-        tag.innerText = '🚨 Risco Crítico';
-        sharkText.className = "font-bold text-base block mt-0.5 text-red-600";
-        sharkIconBox.className = "p-2 rounded-lg bg-red-100 text-red-600";
-      }
-
-      renderChart(data.status);
-
-      // Efeito de voo (FlyTo) suave do Mapbox para focar na praia
-      if (map) {
-        map.flyTo({
-          center: data.coords,
-          zoom: 14,
-          essential: true,
-          speed: 1.2
+        // Evento de clique para disparar o Pop-up nos pontos de risco
+        map.on('singleclick', function (evt) {
+          const feature = map.forEachFeatureAtIntersect(evt.pixel, function (feat) { return feat; });
+          if (feature && feature.get('text')) {
+            const coordinate = evt.coordinate;
+            popupContent.innerHTML = feature.get('text');
+            overlay.setPosition(coordinate);
+          } else {
+            overlay.setPosition(undefined);
+          }
         });
       }
-    }
 
-    function renderChart(status) {
-      const ctx = document.getElementById('tideChart').getContext('2d');
-      if (tideChart) tideChart.destroy();
+      function updateDashboard(beachKey) {
+        const data = beachData[beachKey];
+        if (!data) return;
 
-      let lineColor = '#2563eb';
-      if (status === 'atencao') lineColor = '#d97706';
-      if (status === 'perigo') lineColor = '#dc2626';
+        document.getElementById('statusTitle').innerText = data.title;
+        document.getElementById('statusDescription').innerText = data.desc;
+        document.getElementById('nextTide').innerText = data.nextEvent;
+        document.getElementById('sharkRiskText').innerText = data.sharkRisk;
+        document.getElementById('currentHeightTag').innerText = `Altura: ${data.currentHeight}`;
 
-      const labels = Array.from({length: 24}, (_, i) => `${i}h`);
-      const dataPoints = labels.map((_, i) => Math.sin((i - 6) * 0.5) * 1 + 1.2); 
+        const card = document.getElementById('statusCard');
+        const tag = document.getElementById('statusTag');
+        const sharkText = document.getElementById('sharkRiskText');
+        const sharkIconBox = document.getElementById('sharkIconContainer');
 
-      tideChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: labels,
-          datasets: [{
-            data: dataPoints,
-            borderColor: lineColor,
-            borderWidth: 3,
-            pointRadius: 0,
-            fill: true,
-            backgroundColor: lineColor + '15',
-            tension: 0.4
-          }]
-        },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }
-      });
-    }
+        card.className = "rounded-2xl p-5 border transition-all duration-300 shadow-xs ";
+        tag.className = "text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-md ";
 
-    // Notificações do Navegador
-    document.getElementById('btnChromeNotify').addEventListener('click', () => {
-      const btn = document.getElementById('btnChromeNotify');
-      const statusText = document.getElementById('chromeStatusText');
+        if (data.status === 'seguro') {
+          card.classList.add('bg-emerald-50', 'border-emerald-200');
+          tag.classList.add('bg-emerald-500', 'text-white');
+          tag.innerText = '✓ Seguro com Cuidado';
+          sharkText.className = "font-bold text-base block mt-0.5 text-emerald-600";
+          sharkIconBox.className = "p-2 rounded-lg bg-emerald-100 text-emerald-600";
+        } else if (data.status === 'atencao') {
+          card.classList.add('bg-amber-50', 'border-amber-200');
+          tag.classList.add('bg-amber-500', 'text-white');
+          tag.innerText = '⚠️ Atenção Redobrada';
+          sharkText.className = "font-bold text-base block mt-0.5 text-amber-600";
+          sharkIconBox.className = "p-2 rounded-lg bg-amber-100 text-amber-600";
+        } else if (data.status === 'perigo') {
+          card.classList.add('bg-red-50', 'border-red-200');
+          tag.classList.add('bg-red-500', 'text-white');
+          tag.innerText = '🚨 Risco Crítico';
+          sharkText.className = "font-bold text-base block mt-0.5 text-red-600";
+          sharkIconBox.className = "p-2 rounded-lg bg-red-100 text-red-600";
+        }
 
-      if (!("Notification" in window)) {
-        alert("Este navegador não suporta notificações.");
-        return;
-      }
+        renderChart(data.status);
 
-      Notification.requestPermission().then(permission => {
-        if (permission === "granted") {
-          btn.innerHTML = `<i data-lucide="check" class="w-4 h-4 text-emerald-400"></i> Notificações Ativas!`;
-          btn.className = "w-full bg-emerald-900 text-emerald-300 font-bold text-sm py-3.5 rounded-xl flex items-center justify-center gap-2 cursor-default";
-          statusText.innerText = "Você receberá alertas direto no Chrome.";
-          
-          new Notification("Daniel Monitoramento", {
-            body: "Avisos ativos! O Daniel monitora a praia por você.",
-            icon: "https://cdn-icons-png.flaticon.com/512/3124/3124237.png"
+        // Movimentação suave de foco no OpenLayers
+        if (map) {
+          map.getView().animate({
+            center: ol.proj.fromLonLat(data.coords),
+            zoom: 14,
+            duration: 1000
           });
         }
-      });
-    });
-
-    // Geolocalização GPS + Integração com Marcador Mapbox
-    document.getElementById('btnGpsTrack').addEventListener('click', () => {
-      const alertBox = document.getElementById('gpsAlertBox');
-      const alertText = document.getElementById('gpsAlertText');
-
-      if (!("geolocation" in navigator)) {
-        alert("GPS não suportado.");
-        return;
       }
 
-      alertText.innerText = "Buscando satélites de GPS...";
-      alertBox.classList.remove('hidden');
+      // ─── RENDERIZADOR DO GRÁFICO SEGURO (CHART.JS) ───
+      function renderChart(status) {
+        const ctx = document.getElementById('tideChart').getContext('2d');
+        if (tideChart) tideChart.destroy();
 
-      navigator.geolocation.getCurrentPosition((position) => {
-        const userLng = position.coords.longitude;
-        const userLat = position.coords.latitude;
+        let lineColor = '#2563eb';
+        if (status === 'atencao') lineColor = '#d97706';
+        if (status === 'perigo') lineColor = '#dc2626';
 
-        // Gerenciar marcador de localização azul do usuário no Mapbox
-        if (userMarker) {
-          userMarker.setLngLat([userLng, userLat]);
-        } else {
-          const el = document.createElement('div');
-          el.style.width = '18px';
-          el.style.height = '18px';
-          el.style.backgroundColor = '#3b82f6';
-          el.style.borderRadius = '50%';
-          el.style.border = '3px solid white';
-          el.style.boxShadow = '0 0 10px rgba(59,130,246,0.6)';
+        const labels = Array.from({length: 24}, (_, i) => `${String(i).padStart(2, '0')}:00`);
+        const dataPoints = labels.map((_, i) => Math.sin((i - 6) * 0.5) * 1 + 1.2); 
+        const currentHour = new Date().getHours();
 
-          userMarker = new mapboxgl.Marker(el)
-            .setLngLat([userLng, userLat])
-            .addTo(map);
-        }
+        tideChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                data: dataPoints,
+                borderColor: lineColor,
+                borderWidth: 3,
+                pointRadius: 0,
+                fill: true,
+                backgroundColor: lineColor + '15',
+                tension: 0.4
+              },
+              {
+                label: 'Agora',
+                data: labels.map((_, i) => i === currentHour ? dataPoints[currentHour] : null),
+                pointRadius: 8,
+                pointBackgroundColor: '#3b82f6',
+                pointBorderColor: '#ffffff',
+                pointBorderWidth: 3,
+                showLine: false
+              }
+            ]
+          },
+          options: { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            plugins: { legend: { display: false } }, 
+            scales: { 
+              x: { 
+                display: true,
+                grid: { display: false },
+                ticks: {
+                  color: '#94a3b8',
+                  font: { size: 10 },
+                  maxTicksLimit: 4 // Exibe marcações limpas de tempo espalhadas pela linha
+                }
+              }, 
+              y: { 
+                display: true,
+                grid: { color: '#f1f5f9' },
+                ticks: { color: '#94a3b8', font: { size: 10 } }
+              } 
+            } 
+          }
+        });
+      }
 
-        map.flyTo({ center: [userLng, userLat], zoom: 15 });
+      // Configuração de Notificações
+      document.getElementById('btnChromeNotify').addEventListener('click', () => {
+        const btn = document.getElementById('btnChromeNotify');
+        const statusText = document.getElementById('chromeStatusText');
 
-        // Validação de proximidade com a Igrejinha de Piedade
-        const piedadeLng = -34.9157;
-        const piedadeLat = -8.1678;
-        const distance = Math.sqrt(Math.pow(userLng - piedadeLng, 2) + Math.pow(userLat - piedadeLat, 2));
+        if (!("Notification" in window)) return;
 
-        if (distance < 0.02) {
-          document.getElementById('locationSelect').value = 'piedade';
-          updateDashboard('piedade');
-          alertBox.className = "bg-red-600 text-white p-4 rounded-xl shadow-md flex items-start gap-3";
-          alertText.innerHTML = "<strong>PERIGO!</strong> Você está próximo à Igrejinha de Piedade. O risco de tubarão e correntes aqui é extremo. Evite o banho.";
-        } else {
-          document.getElementById('locationSelect').value = 'boa-viagem';
-          updateDashboard('boa-viagem');
-          alertBox.className = "bg-amber-500 text-slate-900 p-4 rounded-xl shadow-md flex items-start gap-3";
-          alertText.innerHTML = "Você está na orla protegida. Monitore o horário para quando a maré cobrir os arrecifes.";
-        }
+        Notification.requestPermission().then(permission => {
+          if (permission === "granted") {
+            btn.innerHTML = `<i data-lucide="check" class="w-4 h-4 text-emerald-400"></i> Notificações Ativas!`;
+            btn.className = "w-full bg-emerald-900 text-emerald-300 font-bold text-sm py-3.5 rounded-xl flex items-center justify-center gap-2 cursor-default";
+            statusText.innerText = "Você receberá alertas direto no Chrome.";
+            new Notification("Daniel", { body: "Avisos de maré ativados com sucesso!" });
+          }
+        });
+      });
 
-      }, () => {
-        alertBox.classList.add('hidden');
-        alert("Ative seu GPS no Chrome para monitorar em tempo real.");
-      }, { enableHighAccuracy: true });
-    });
+      // Localização via GPS com Marcador no OpenLayers
+      document.getElementById('btnGpsTrack').addEventListener('click', () => {
+        const alertBox = document.getElementById('gpsAlertBox');
+        const alertText = document.getElementById('gpsAlertText');
 
-    window.addEventListener('DOMContentLoaded', () => {
+        if (!("geolocation" in navigator)) return;
+
+        alertText.innerText = "Buscando satélites de GPS...";
+        alertBox.classList.remove('hidden');
+
+        navigator.geolocation.getCurrentPosition((position) => {
+          const userLng = position.coords.longitude;
+          const userLat = position.coords.latitude;
+          const userCoords = ol.proj.fromLonLat([userLng, userLat]);
+
+          if (userFeature) {
+            userFeature.getGeometry().setCoordinates(userCoords);
+          } else {
+            userFeature = new ol.Feature({ geometry: new ol.geom.Point(userCoords) });
+            userFeature.setStyle(new ol.style.Style({
+              image: new ol.style.Circle({
+                radius: 9,
+                fill: new ol.style.Fill({ color: '#3b82f6' }),
+                stroke: new ol.style.Stroke({ color: '#ffffff', width: 3 })
+              })
+            }));
+            vectorSource.addFeature(userFeature);
+          }
+
+          map.getView().animate({ center: userCoords, zoom: 15, duration: 1000 });
+
+          // Distância aproximada até a Igrejinha de Piedade
+          const piedadeLng = -34.9157;
+          const piedadeLat = -8.1678;
+          const distance = Math.sqrt(Math.pow(userLng - piedadeLng, 2) + Math.pow(userLat - piedadeLat, 2));
+
+          if (distance < 0.02) {
+            document.getElementById('locationSelect').value = 'piedade';
+            updateDashboard('piedade');
+            alertBox.className = "bg-red-600 text-white p-4 rounded-xl shadow-md flex items-start gap-3";
+            alertText.innerHTML = "<strong>PERIGO!</strong> Próximo à Igrejinha de Piedade. Risco extremo de tubarão.";
+          } else {
+            document.getElementById('locationSelect').value = 'boa-viagem';
+            updateDashboard('boa-viagem');
+            alertBox.className = "bg-amber-500 text-slate-900 p-4 rounded-xl shadow-md flex items-start gap-3";
+            alertText.innerHTML = "Você está na zona monitorada de Boa Viagem.";
+          }
+        }, () => {
+          alertBox.classList.add('hidden');
+          alert("Permita o acesso ao GPS nas configurações do Chrome.");
+        }, { enableHighAccuracy: true });
+      });
+
+      document.getElementById('locationSelect').addEventListener('change', (e) => {
+        updateDashboard(e.target.value);
+      });
+
+      // Inicialização do fluxo
       initMap();
       updateDashboard('boa-viagem');
     });
