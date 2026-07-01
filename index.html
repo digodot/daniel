@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daniel - Monitoramento de Maré RMR</title>
+  <!-- Tailwind CSS para Estilização Rápida -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <!-- Chart.js para o Gráfico da Onda da Maré -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons para os Ícones da Interface -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Leaflet.js CSS para o Mapa Interativo -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Leaflet.js Script -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    .leaflet-container { z-index: 10; font-family: sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans antialiased min-h-screen pb-24">
+
+  <!-- CABEÇALHO -->
+  <header class="bg-white border-b border-slate-100 sticky top-0 z-50 shadow-xs">
+    <div class="max-w-md mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="bg-blue-600 text-white p-2 rounded-xl shadow-md shadow-blue-100">
+          <i data-lucide="waves" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight text-slate-900">Daniel</h1>
+          <p class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Seu guia na praia</p>
+        </div>
+      </div>
+      
+      <!-- Seletor de Localização -->
+      <div class="relative">
+        <select id="locationSelect" class="appearance-none bg-slate-100 hover:bg-slate-200 text-slate-800 text-sm font-medium py-2 pl-3 pr-8 rounded-full border-none focus:outline-hidden focus:ring-2 focus:ring-blue-500 cursor-pointer transition-colors">
+          <option value="boa-viagem">📍 Boa Viagem</option>
+          <option value="piedade">📍 Piedade</option>
+          <option value="olinda">📍 Olinda</option>
+          <option value="paiva">📍 Praia do Paiva</option>
+        </select>
+        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500">
+          <i data-lucide="chevron-down" class="w-4 h-4"></i>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- CONTEÚDO PRINCIPAL -->
+  <main class="max-w-md mx-auto px-4 mt-6 space-y-5">
+
+    <!-- NOVO: NOTIFICAÇÃO DE ALERTA BASEADA NA LOCALIZAÇÃO DO GPS -->
+    <div id="gpsAlertBox" class="hidden bg-red-600 text-white p-4 rounded-xl shadow-md flex items-start gap-3 animate-pulse">
+      <div class="bg-white/20 p-2 rounded-lg mt-0.5">
+        <i data-lucide="navigation" class="w-5 h-5 text-white"></i>
+      </div>
+      <div class="flex-1">
+        <h4 class="font-bold text-sm">Daniel detectou sua localização!</h4>
+        <p id="gpsAlertText" class="text-xs text-red-100 mt-0.5">Calculando riscos da sua área...</p>
+      </div>
+    </div>
+
+    <!-- 1. CARD DE STATUS PRINCIPAL -->
+    <section id="statusCard" class="rounded-2xl p-5 border transition-all duration-300 shadow-xs">
+      <div class="flex items-center justify-between">
+        <span id="statusTag" class="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-md"></span>
+        <div class="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+          <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          Tempo Real
+        </div>
+      </div>
+      
+      <h2 id="statusTitle" class="mt-3 text-2xl font-black tracking-tight text-slate-950"></h2>
+      <p id="statusDescription" class="text-sm text-slate-600 mt-1 leading-relaxed"></p>
+      
+      <div class="mt-5 grid grid-cols-2 gap-3">
+        <div class="bg-white/80 backdrop-blur-xs p-3 rounded-xl border border-slate-100/50">
+          <span class="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">Próximo Evento</span>
+          <span id="nextTide" class="font-bold text-slate-800 text-base block mt-0.5">--</span>
+        </div>
+        <div class="bg-white/80 backdrop-blur-xs p-3 rounded-xl border border-slate-100/50 flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">Risco Tubarão</span>
+            <span id="sharkRiskText" class="font-bold text-base block mt-0.5">--</span>
+          </div>
+          <div id="sharkIconContainer" class="p-2 rounded-lg">
+            <i data-lucide="shield-alert" class="w-5 h-5"></i>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. MAPA DE INCIDENTES -->
+    <section class="bg-white rounded-2xl p-4 border border-slate-100 shadow-xs space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+          <i data-lucide="map" class="w-4 h-4 text-red-500"></i> Mapa de Riscos & Ocorrências
+        </h3>
+        <span class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">Histórico</span>
+      </div>
+      <div id="incidentMap" class="w-full h-64 rounded-xl border border-slate-100 overflow-hidden shadow-inner"></div>
+      <div class="flex justify-start gap-4 text-[11px] font-semibold text-slate-500 px-1">
+        <div class="flex items-center gap-1">
+          <span class="inline-block w-3 h-3 rounded-full bg-red-600"></span> 🦈 Ataque de Tubarão
+        </div>
+        <div class="flex items-center gap-1">
+          <span class="inline-block w-3 h-3 rounded-full bg-amber-500"></span> ⚠️ Afogamento / Corrente
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. GRÁFICO DA ONDA DA MARÉ -->
+    <section class="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+          <i data-lucide="activity" class="w-4 h-4 text-blue-500"></i> Movimento da Maré (Hoje)
+        </h3>
+        <span id="currentHeightTag" class="text-xs font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-sm">--</span>
+      </div>
+      <div class="w-full h-40 relative">
+        <canvas id="tideChart"></canvas>
+      </div>
+    </section>
+
+    <!-- 4. CAPTAÇÃO COM ATIVAÇÃO NATIVA DO CHROME -->
+    <section class="bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-2xl p-5 shadow-lg space-y-4">
+      <div class="flex items-start gap-3">
+        <div class="bg-white/10 p-2 rounded-xl mt-0.5">
+          <i data-lucide="chrome" class="w-5 h-5 text-blue-400"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-lg leading-tight">Ativar Notificações Oficiais do Chrome</h3>
+          <p class="text-xs text-slate-400 mt-1 leading-relaxed">Permita que o Daniel envie alertas urgentes direto na tela do seu celular ou computador sempre que houver mudanças críticas na maré.</p>
+        </div>
+      </div>
+      
+      <div class="space-y-2">
+        <button id="btnChromeNotify" type="button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md">
+          <i data-lucide="bell-ring" class="w-4 h-4"></i> Permitir Notificações no Navegador
+        </button>
+        <p id="chromeStatusText" class="text-center text-[11px] text-slate-500 font-medium">O Chrome solicitará sua autorização.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- BOTÃO FLUTUANTE DE GPS (FIXO NO RODAPÉ DO CELULAR) -->
+  <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-xs px-4">
+    <button id="btnGpsTrack" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-sm py-4 rounded-full shadow-2xl shadow-amber-500/40 flex items-center justify-center gap-2.5 tracking-wide uppercase cursor-pointer border-2 border-white transition-all transform active:scale-95">
+      <i data-lucide="locate-fixed" class="w-5 h-5 animate-spin-slow"></i> Monitorar Minha Praia via GPS
+    </button>
+  </div>
+
+  <!-- LÓGICA JAVASCRIPT -->
+  <script>
+    lucide.createIcons();
+
+    // Dados das Praias
+    const beachData = {
+      'boa-viagem': { coords: [-8.1130, -34.8931], name: 'Boa Viagem (Acaiaca)', status: 'atencao', title: 'Maré Enchendo Agora', desc: 'A água está cobrindo a linha de arrecifes. Evite o banho nas valas abertas e retorne para a areia.', nextEvent: 'Alta: 15:42 (2.2m)', sharkRisk: 'Alto', currentHeight: '1.4m' },
+      'piedade': { coords: [-8.1678, -34.9157], name: 'Piedade (Igrejinha)', status: 'perigo', title: 'Área com Banho Restrito', desc: 'Risco crítico de incidentes com tubarões e fortes correntes de retorno. O banho profundo é proibido por decreto neste trecho.', nextEvent: 'Alta: 15:40 (2.2m)', sharkRisk: 'Extremo', currentHeight: '1.4m' },
+      'olinda': { coords: [-7.9892, -34.8422], name: 'Olinda (Casa Caiada)', status: 'seguro', title: 'Maré Baixa Estabilizada', desc: 'Condições ideais para caminhadas na faixa de areia. Água rasa perto da costa, evite entulhos.', nextEvent: 'Baixa: 21:50 (0.3m)', sharkRisk: 'Baixo', currentHeight: '0.4m' },
+      'paiva': { coords: [-8.2323, -34.9452], name: 'Cabo (Praia do Paiva)', status: 'atencao', title: 'Mar Aberto e Ondas Fortes', desc: 'Praia sem proteção de arrecifes. Correntes de repuxo intensas exigem cuidado redobrado de banhistas.', nextEvent: 'Alta: 15:45 (2.1m)', sharkRisk: 'Moderado', currentHeight: '1.3m' }
+    };
+
+    const incidentPoints = [
+      { lat: -8.1172, lng: -34.8943, type: 'shark', text: '<b>Incidente com Tubarão</b><br>Trecho do Edifício Acaiaca (Boa Viagem).' },
+      { lat: -8.1685, lng: -34.9161, type: 'shark', text: '<b>Incidente Crítico (Tubarão)</b><br>Entorno da Igrejinha de Piedade.' },
+      { lat: -8.1025, lng: -34.8878, type: 'afogamento', text: '<b>Alerta de Afogamento</b><br>Posto 4 de Boa Viagem.' }
+    ];
+
+    let tideChart = null;
+    let map = null;
+    let userLocationMarker = null;
+
+    function initMap() {
+      map = L.map('incidentMap', { zoomControl: false }).setView([-8.1200, -34.9000], 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+
+      incidentPoints.forEach(point => {
+        const markerColor = point.type === 'shark' ? '#dc2626' : '#d97706';
+        L.circleMarker([point.lat, point.lng], { radius: 8, fillColor: markerColor, color: '#ffffff', weight: 2, opacity: 1, fillOpacity: 0.9 }).addTo(map).bindPopup(`<div class="text-xs text-slate-700 font-sans">${point.text}</div>`);
+      });
+    }
+
+    function updateDashboard(beachKey) {
+      const data = beachData[beachKey];
+      document.getElementById('statusTitle').innerText = data.title;
+      document.getElementById('statusDescription').innerText = data.desc;
+      document.getElementById('nextTide').innerText = data.nextEvent;
+      document.getElementById('sharkRiskText').innerText = data.sharkRisk;
+      document.getElementById('currentHeightTag').innerText = `Altura: ${data.currentHeight}`;
+
+      const card = document.getElementById('statusCard');
+      const tag = document.getElementById('statusTag');
+      const sharkText = document.getElementById('sharkRiskText');
+      const sharkIconBox = document.getElementById('sharkIconContainer');
+
+      card.className = "rounded-2xl p-5 border transition-all duration-300 shadow-xs ";
+      tag.className = "text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-md ";
+
+      if (data.status === 'seguro') {
+        card.classList.add('bg-emerald-50', 'border-emerald-200');
+        tag.classList.add('bg-emerald-500', 'text-white');
+        tag.innerText = '✓ Seguro com Cuidado';
+        sharkText.className = "font-bold text-base block mt-0.5 text-emerald-600";
+        sharkIconBox.className = "p-2 rounded-lg bg-emerald-100 text-emerald-600";
+      } else if (data.status === 'atencao') {
+        card.classList.add('bg-amber-50', 'border-amber-200');
+        tag.classList.add('bg-amber-500', 'text-white');
+        tag.innerText = '⚠️ Atenção Redobrada';
+        sharkText.className = "font-bold text-base block mt-0.5 text-amber-600";
+        sharkIconBox.className = "p-2 rounded-lg bg-amber-100 text-amber-600";
+      } else if (data.status === 'perigo') {
+        card.classList.add('bg-red-50', 'border-red-200');
+        tag.classList.add('bg-red-500', 'text-white');
+        tag.innerText = '🚨 Risco Crítico';
+        sharkText.className = "font-bold text-base block mt-0.5 text-red-600";
+        sharkIconBox.className = "p-2 rounded-lg bg-red-100 text-red-600";
+      }
+
+      renderChart(data.status);
+      if (map) map.panTo(new L.LatLng(data.coords[0], data.coords[1]), { animate: true, duration: 1 });
+    }
+
+    function renderChart(status) {
+      const ctx = document.getElementById('tideChart').getContext('2d');
+      if (tideChart) tideChart.destroy();
+
+      let lineColor = '#2563eb';
+      if (status === 'atencao') lineColor = '#d97706';
+      if (status === 'perigo') lineColor = '#dc2626';
+
+      const labels = Array.from({length: 24}, (_, i) => `${i}h`);
+      const dataPoints = labels.map((_, i) => Math.sin((i - 6) * 0.5) * 1 + 1.2); 
+
+      tideChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: dataPoints,
+            borderColor: lineColor,
+            borderWidth: 3,
+            pointRadius: 0,
+            fill: true,
+            backgroundColor: lineColor + '15',
+            tension: 0.4
+          }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }
+      });
+    }
+
+    // ─── LÓGICA DE NOTIFICAÇÃO NATIVA DO CHROME ───
+    document.getElementById('btnChromeNotify').addEventListener('click', () => {
+      const btn = document.getElementById('btnChromeNotify');
+      const statusText = document.getElementById('chromeStatusText');
+
+      if (!("Notification" in window)) {
+        alert("Este navegador não suporta notificações de desktop.");
+        return;
+      }
+
+      // Dispara a caixa de diálogo padrão do Chrome
+      Notification.requestPermission().then(permission => {
+        if (permission === "granted") {
+          btn.innerHTML = `<i data-lucide="check" class="w-4 h-4 text-emerald-400"></i> Notificações Ativas!`;
+          btn.className = "w-full bg-emerald-900 text-emerald-300 font-bold text-sm py-3.5 rounded-xl flex items-center justify-center gap-2 cursor-default";
+          statusText.innerText = "Você receberá alertas direto no Chrome.";
+          
+          // Dispara a primeira notificação imediatamente
+          new Notification("Daniel Monitoramento", {
+            body: "Olá! Sou o Daniel. Agora você receberá os alertas de maré e riscos na RMR aqui no Chrome.",
+            icon: "https://cdn-icons-png.flaticon.com/512/3124/3124237.png"
+          });
+        } else if (permission === "denied") {
+          btn.className = "w-full bg-red-900 text-red-200 font-bold text-sm py-3.5 rounded-xl flex items-center justify-center gap-2";
+          btn.innerText = "Notificações Bloqueadas";
+          statusText.innerText = "Você bloqueou as notificações. Reative nas configurações do cadeado do Chrome.";
+        }
+      });
+    });
+
+    // ─── LÓGICA DE GEOLOCALIZAÇÃO POR GPS (MONITORAR MINHA PRAIA) ───
+    document.getElementById('btnGpsTrack').addEventListener('click', () => {
+      const alertBox = document.getElementById('gpsAlertBox');
+      const alertText = document.getElementById('gpsAlertText');
+
+      if (!("geolocation" in navigator)) {
+        alert("Seu celular não tem suporte a GPS ou a localização está desativada.");
+        return;
+      }
+
+      alertText.innerText = "Buscando satélites de GPS...";
+      alertBox.classList.remove('hidden');
+
+      navigator.geolocation.getCurrentPosition((position) => {
+        const userLat = position.coords.latitude;
+        const userLng = position.coords.longitude;
+
+        // Adiciona ou move a bolinha azul do usuário no mapa
+        if (userLocationMarker) {
+          userLocationMarker.setLatLng([userLat, userLng]);
+        } else {
+          userLocationMarker = L.circleMarker([userLat, userLng], {
+            radius: 10, fillColor: '#3b82f6', color: '#ffffff', weight: 3, opacity: 1, fillOpacity: 1
+          }).addTo(map).bindPopup("<b>Você está aqui</b>").openPopup();
+        }
+
+        // Foca o mapa na localização do usuário
+        map.setView([userLat, userLng], 15);
+
+        // Lógica de proximidade simples (Medindo distância até Piedade)
+        // Coordenadas aproximadas do epicentro de risco de Piedade
+        const piedadeLat = -8.1678;
+        const piedadeLng = -34.9157;
+        
+        // Fórmula de distância matemática simples (Euclidiana aproximada para o exemplo)
+        const distanceToPiedade = Math.sqrt(Math.pow(userLat - piedadeLat, 2) + Math.pow(userLng - piedadeLng, 2));
+
+        // Se estiver muito perto de Piedade (menos de ~2km de variação coordenada)
+        if (distanceToPiedade < 0.02) {
+          document.getElementById('locationSelect').value = 'piedade';
+          updateDashboard('piedade');
+          alertBox.className = "bg-red-600 text-white p-4 rounded-xl shadow-md flex items-start gap-3";
+          alertText.innerHTML = "<strong>PERIGO!</strong> Você está na Praia de Piedade. A maré atual gera forte repuxo e o risco de tubarão é extremo. <strong>Não entre na água profunda!</strong>";
+          
+          // Dispara alerta Push no Chrome também se estiver ativo
+          if (Notification.permission === "granted") {
+            new Notification("ALERTA DANIEL: PERIGO EM PIEDADE", {
+              body: "Você entrou em uma zona de risco crítico. Banho restrito na Igrejinha!",
+              icon: "https://cdn-icons-png.flaticon.com/512/3124/3124237.png"
+            });
+          }
+        } else {
+          // Caso contrário, assume Boa Viagem como o ponto padrão próximo mais seguro
+          document.getElementById('locationSelect').value = 'boa-viagem';
+          updateDashboard('boa-viagem');
+          alertBox.className = "bg-amber-500 text-slate-900 p-4 rounded-xl shadow-md flex items-start gap-3";
+          alertText.innerHTML = "Você está na orla de Boa Viagem. A maré está enchendo. Permaneça na área protegida pelos arrecifes.";
+        }
+
+      }, (error) => {
+        alertBox.classList.add('hidden');
+        alert("Não foi possível acessar seu GPS. Verifique se permitiu o acesso à localização no Chrome.");
+      }, {
+        enableHighAccuracy: true // Força o uso do GPS de alta precisão do celular
+      });
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      initMap();
+      updateDashboard('boa-viagem');
+    });
+  </script>
+</body>
+</html>
