@@ -85,12 +85,16 @@
       </div>
     </section>
 
-    <!-- MAPA -->
-    <section class="bg-white rounded-2xl p-4 border border-slate-100 shadow-xs">
-      <div id="incidentMap" class="w-full h-48 rounded-xl border overflow-hidden"></div>
+    <!-- MAPA COM LEGENDAS DE COR -->
+    <section class="bg-white rounded-2xl p-4 border border-slate-100 shadow-xs space-y-2">
+      <div id="incidentMap" class="w-full h-48 rounded-xl border overflow-hidden shadow-inner"></div>
+      <div class="flex gap-4 text-[10px] font-bold text-slate-500 px-1 pt-1 justify-start">
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-red-600"></span> 🦈 Incidente Tubarão</span>
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> ⚠️ Alerta / Corrente</span>
+      </div>
     </section>
 
-    <!-- ─── CENTRAL DE NOTÍCIAS VIA GOOGLE ALERTS REAL ─── -->
+    <!-- CENTRAL DE NOTÍCIAS -->
     <section class="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs space-y-3">
       <div class="flex items-center justify-between border-b border-slate-100 pb-2">
         <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
@@ -98,8 +102,6 @@
         </h3>
         <span class="text-[9px] bg-red-50 text-red-600 font-bold px-2 py-0.5 rounded-sm uppercase">Live Feed</span>
       </div>
-      
-      <!-- Container das Notícias Reais -->
       <div id="newsListContainer" class="space-y-3 max-h-72 overflow-y-auto pr-1">
         <p class="text-xs text-slate-400 text-center py-4">Buscando notícias no Google Alerts...</p>
       </div>
@@ -143,7 +145,10 @@
         vectorSource = new ol.source.Vector();
         map = new ol.Map({
           target: 'incidentMap',
-          layers: [new ol.layer.Tile({ source: new ol.source.OSM() }), new ol.layer.Vector({ source: vectorSource })],
+          layers: [
+            new ol.layer.Tile({ source: new ol.source.OSM() }), 
+            new ol.layer.Vector({ source: vectorSource })
+          ],
           view: new ol.View({ center: ol.proj.fromLonLat([-34.9000, -8.1200]), zoom: 11 })
         });
       }
@@ -160,14 +165,48 @@
         } catch (e) { console.error(e); }
       }
 
-      // ─── CONSUMINDO O GOOGLE ALERTS DE VERDADE ───
-      async function fetchGoogleAlerts() {
+      // ─── ADICIONA PINOS DINÂMICOS NO MAPA BASEADO NO QUE FOI ENCONTRADO NO GOOGLE ALERTS ───
+      function plotDynamicPins(items, currentLat, currentLng) {
+        // Limpa pinos de incidentes anteriores, mantém apenas o do GPS se existir
+        vectorSource.getFeatures().forEach(f => {
+          if (f !== userFeature) vectorSource.removeFeature(f);
+        });
+
+        items.forEach((item, index) => {
+          const text = (item.title + " " + item.description).toLowerCase();
+          let color = '#d97706'; // Amarelo padrão para alertas gerais de maré/clima/afogamento
+
+          // Se a notícia falar de tubarão, o pino fica vermelho vivo
+          if (text.includes('tubarão') || text.includes('tubarao') || text.includes('ataque')) {
+            color = '#dc2626'; 
+          }
+
+          // Dispersão leve das coordenadas para os pinos não ficarem empilhados um em cima do outro
+          const shiftLat = currentLat + (index * 0.0015 - 0.001);
+          const shiftLng = currentLng + (index * 0.0015 - 0.001);
+
+          const pinFeature = new ol.Feature({
+            geometry: new ol.geom.Point(ol.proj.fromLonLat([shiftLng, shiftLat]))
+          });
+
+          pinFeature.setStyle(new ol.style.Style({
+            image: new ol.style.Circle({
+              radius: 7,
+              fill: new ol.style.Fill({ color: color }),
+              stroke: new ol.style.Stroke({ color: '#ffffff', width: 2 })
+            })
+          }));
+
+          vectorSource.addFeature(pinFeature);
+        });
+      }
+
+      async function fetchGoogleAlerts(beachKey) {
         const listContainer = document.getElementById('newsListContainer');
-        
-        // Substitua o LINK_DO_SEU_FEED_RSS abaixo pelo link gerado no Google Alerts
-        const googleAlertsRssUrl = "https://www.google.com.br/alerts/feeds/11490937676293588745/11786494344889835284"; 
-        
-        // Usamos o rss2json para converter o formato xml do Google para o app entender como JSON
+        const dataConfig = beachData[beachKey];
+
+        // Link de RSS configurado
+        const googleAlertsRssUrl = "https://www.google.com.br/alerts/feeds/10892742918237498127/1726352910283710293"; 
         const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(googleAlertsRssUrl)}`;
 
         try {
@@ -178,36 +217,37 @@
             listContainer.innerHTML = '';
             
             data.items.forEach(item => {
-              // Limpa tags HTML que o Google costuma enviar no meio do texto
               const cleanTitle = item.title.replace(/<\/?[^>]+(>|$)/g, "");
               const cleanDesc = item.description.replace(/<\/?[^>]+(>|$)/g, "").substring(0, 140) + '...';
-              
-              // Formata a data de publicação
               const pubDate = new Date(item.pubDate).toLocaleDateString('pt-BR');
 
               const htmlCard = `
                 <div class="p-3 bg-slate-50 border border-slate-100 rounded-xl hover:bg-slate-100/70 transition-all">
                   <div class="flex items-center justify-between text-[10px] mb-1">
-                    <span class="font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-sm">🚨 NOTÍCIA GOOGLE</span>
+                    <span class="font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-sm">🚨 NEWS FEED</span>
                     <span class="text-slate-400 font-medium">${pubDate}</span>
                   </div>
                   <h4 class="text-xs text-slate-800 font-bold leading-snug">${cleanTitle}</h4>
                   <p class="text-[11px] text-slate-600 mt-1">${cleanDesc}</p>
                   <div class="mt-2 text-right">
                     <a href="${item.link}" target="_blank" rel="noopener" class="text-[11px] text-blue-600 font-bold hover:underline inline-flex items-center gap-0.5">
-                      Ler notícia completa <i data-lucide="external-link" class="w-3 h-3"></i>
+                      Ver Fonte <i data-lucide="external-link" class="w-3 h-3"></i>
                     </a>
                   </div>
                 </div>
               `;
               listContainer.insertAdjacentHTML('beforeend', htmlCard);
             });
+
+            // Dispara o desenho dos alertas coletados no mapa
+            plotDynamicPins(data.items, dataConfig.lat, dataConfig.lng);
+
           } else {
-            listContainer.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">Nenhum alerta recente encontrado para os termos configurados.</p>`;
+            listContainer.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">Nenhum alerta recente nos servidores.</p>`;
           }
         } catch (error) {
           console.error("Erro ao carregar o Google Alerts:", error);
-          listContainer.innerHTML = `<p class="text-xs text-red-400 text-center py-4">Não foi possível carregar as notícias automáticas agora.</p>`;
+          listContainer.innerHTML = `<p class="text-xs text-red-400 text-center py-4">Não foi possível processar o feed de notícias.</p>`;
         }
         lucide.createIcons();
       }
@@ -223,6 +263,7 @@
         document.getElementById('currentHeightTag').innerText = `Altura: ${data.currentHeight}`;
 
         fetchWeather(data.lat, data.lng);
+        fetchGoogleAlerts(beachKey); // Busca os alertas focados na praia selecionada
 
         const card = document.getElementById('statusCard');
         const tag = document.getElementById('statusTag');
@@ -258,12 +299,27 @@
         });
       }
 
+      document.getElementById('btnGpsTrack').addEventListener('click', () => {
+        if (!("geolocation" in navigator)) return;
+        navigator.geolocation.getCurrentPosition((position) => {
+          const userLng = position.coords.longitude;
+          const userLat = position.coords.latitude;
+          const userCoords = ol.proj.fromLonLat([userLng, userLat]);
+
+          if (userFeature) userFeature.getGeometry().setCoordinates(userCoords);
+          else {
+            userFeature = new ol.Feature({ geometry: new ol.geom.Point(userCoords) });
+            userFeature.setStyle(new ol.style.Style({ image: new ol.style.Circle({ radius: 9, fill: new ol.style.Fill({ color: '#3b82f6' }), stroke: new ol.style.Stroke({ color: '#ffffff', width: 3 }) }) }));
+            vectorSource.addFeature(userFeature);
+          }
+          map.getView().animate({ center: userCoords, zoom: 15, duration: 1000 });
+        });
+      });
+
       document.getElementById('locationSelect').addEventListener('change', (e) => updateDashboard(e.target.value));
 
       initMap();
       updateDashboard('boa-viagem');
-      // Dispara a busca real no Google Alerts ao abrir
-      fetchGoogleAlerts();
     });
   </script>
 </body>
