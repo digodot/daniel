@@ -3,79 +3,139 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Daniel - Monitoramento de Maré RMR</title>
+  <title>Daniel - Monitoramento de Maré & Turismo RMR</title>
+  <!-- Tailwind CSS -->
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <!-- Chart.js para a Maré -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- OPENLAYERS (100% GRATUITO E SEM CHAVE) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v8.2.0/ol.css">
   <script src="https://cdn.jsdelivr.net/npm/ol@v8.2.0/dist/ol.js"></script>
+  
+  <style>
+    .ol-control button {
+      background-color: #2563eb !important;
+      color: white !important;
+      border-radius: 6px !important;
+    }
+    .ol-popup {
+      position: absolute;
+      background-color: white;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+      bottom: 12px;
+      left: -50px;
+      min-width: 200px;
+      font-size: 12px;
+    }
+    .ol-popup:after, .ol-popup:before {
+      top: 100%;
+      border: solid transparent;
+      content: " ";
+      height: 0;
+      width: 0;
+      position: absolute;
+      pointer-events: none;
+    }
+    .ol-popup:after {
+      border-top-color: white;
+      border-width: 10px;
+      left: 48px;
+      margin-left: -10px;
+    }
+  </style>
 </head>
 <body class="bg-slate-50 text-slate-900 font-sans antialiased min-h-screen pb-24">
 
+  <!-- CABEÇALHO -->
   <header class="bg-white border-b border-slate-100 sticky top-0 z-50 shadow-xs">
     <div class="max-w-md mx-auto px-4 h-16 flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <div class="bg-blue-600 text-white p-2 rounded-xl shadow-md">
+        <div class="bg-blue-600 text-white p-2 rounded-xl shadow-md shadow-blue-100">
           <i data-lucide="waves" class="w-5 h-5"></i>
         </div>
         <div>
-          <h1 class="text-xl font-bold text-slate-900">Daniel</h1>
-          <p class="text-[10px] text-slate-500 uppercase font-semibold">Seu guia na praia</p>
+          <h1 class="text-xl font-bold tracking-tight text-slate-900">Daniel</h1>
+          <p class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Maré & Guia Turístico PE</p>
         </div>
       </div>
       
+      <!-- Seletor de Localização Expandido -->
       <div class="relative">
-        <select id="locationSelect" class="appearance-none bg-slate-100 text-slate-800 text-sm font-medium py-2 pl-3 pr-8 rounded-full border-none focus:outline-hidden focus:ring-2 focus:ring-blue-500 cursor-pointer">
-          <option value="boa-viagem">📍 Boa Viagem</option>
-          <option value="piedade">📍 Piedade</option>
-          <option value="olinda">📍 Olinda</option>
-          <option value="paiva">📍 Praia do Paiva</option>
+        <select id="locationSelect" class="appearance-none bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold py-2 pl-3 pr-7 rounded-full border-none focus:outline-hidden focus:ring-2 focus:ring-blue-500 cursor-pointer transition-colors">
+          <option value="boa-viagem">📍 Boa Viagem (Recife)</option>
+          <option value="piedade">📍 Piedade (Jaboatão)</option>
+          <option value="olinda">📍 Olinda (Casa Caiada)</option>
+          <option value="paiva">📍 Praia do Paiva (Cabo)</option>
+          <option value="porto-galinhas">📍 Porto de Galinhas (Ipojuca)</option>
+          <option value="carneiros">📍 Carneiros (Tamandaré)</option>
+          <option value="maria-farinha">📍 Maria Farinha (Paulista)</option>
+          <option value="itamaraca">📍 Ilha de Itamaracá</option>
         </select>
-        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500">
-          <i data-lucide="chevron-down" class="w-4 h-4"></i>
+        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-500">
+          <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
         </div>
       </div>
     </div>
   </header>
 
+  <!-- CONTEÚDO PRINCIPAL -->
   <main class="max-w-md mx-auto px-4 mt-6 space-y-5">
 
-    <!-- CLIMA -->
+    <!-- ALERTA DE GPS -->
+    <div id="gpsAlertBox" class="hidden bg-red-600 text-white p-4 rounded-xl shadow-md flex items-start gap-3 animate-pulse">
+      <div class="bg-white/20 p-2 rounded-lg mt-0.5">
+        <i data-lucide="navigation" class="w-5 h-5 text-white"></i>
+      </div>
+      <div class="flex-1">
+        <h4 class="font-bold text-sm">Daniel detectou sua localização!</h4>
+        <p id="gpsAlertText" class="text-xs text-red-100 mt-0.5">Calculando riscos da sua área...</p>
+      </div>
+    </div>
+
+    <!-- PREVISÃO DO TEMPO EM TEMPO REAL -->
     <section class="bg-gradient-to-br from-blue-500 to-sky-600 text-white rounded-2xl p-4 shadow-md flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div id="weatherIcon" class="bg-white/20 p-2.5 rounded-xl text-white">
-          <i data-lucide="sun" class="w-6 h-6"></i>
+          <i data-lucide="sun" class="w-6 h-6 animate-spin-slow"></i>
         </div>
         <div>
-          <span class="text-[10px] text-sky-100 font-bold uppercase block">Previsão do Tempo</span>
-          <h3 id="weatherStatus" class="font-bold text-sm">Carregando clima...</h3>
+          <span class="text-[10px] text-sky-100 font-bold uppercase tracking-wider block">Previsão do Tempo</span>
+          <h3 id="weatherStatus" class="font-bold text-sm leading-tight">Carregando clima...</h3>
         </div>
       </div>
       <div class="text-right">
-        <span id="weatherTemp" class="text-3xl font-black block">--°C</span>
+        <span id="weatherTemp" class="text-3xl font-black block tracking-tighter">--°C</span>
         <span id="weatherWind" class="text-[10px] text-sky-100 font-medium block">Vento: -- km/h</span>
       </div>
     </section>
 
-    <!-- CARD STATUS -->
-    <section id="statusCard" class="rounded-2xl p-5 border shadow-xs">
+    <!-- 1. CARD DE STATUS DA MARÉ E RISCO -->
+    <section id="statusCard" class="rounded-2xl p-5 border transition-all duration-300 shadow-xs">
       <div class="flex items-center justify-between">
-        <span id="statusTag" class="text-xs font-bold uppercase px-2.5 py-1 rounded-md"></span>
+        <span id="statusTag" class="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-md"></span>
         <div class="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-          <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> Tempo Real
+          <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          Tempo Real
         </div>
       </div>
-      <h2 id="statusTitle" class="mt-3 text-2xl font-black text-slate-950"></h2>
-      <p id="statusDescription" class="text-sm text-slate-600 mt-1"></p>
+      
+      <h2 id="statusTitle" class="mt-3 text-2xl font-black tracking-tight text-slate-950"></h2>
+      <p id="statusDescription" class="text-sm text-slate-600 mt-1 leading-relaxed"></p>
       
       <div class="mt-5 grid grid-cols-2 gap-3">
-        <div class="bg-white/80 p-3 rounded-xl border border-slate-100">
-          <span class="text-[11px] font-medium text-slate-400 block uppercase">Próximo Evento</span>
+        <div class="bg-white/80 backdrop-blur-xs p-3 rounded-xl border border-slate-100/50">
+          <span class="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">Próximo Evento</span>
           <span id="nextTide" class="font-bold text-slate-800 text-base block mt-0.5">--</span>
         </div>
-        <div class="bg-white/80 p-3 rounded-xl border border-slate-100 flex items-center justify-between">
+        <div class="bg-white/80 backdrop-blur-xs p-3 rounded-xl border border-slate-100/50 flex items-center justify-between">
           <div>
-            <span class="text-[11px] font-medium text-slate-400 block uppercase">Risco Tubarão</span>
+            <span class="text-[11px] font-medium text-slate-400 block uppercase tracking-wider">Risco Tubarão</span>
             <span id="sharkRiskText" class="font-bold text-base block mt-0.5">--</span>
           </div>
           <div id="sharkIconContainer" class="p-2 rounded-lg">
@@ -85,29 +145,42 @@
       </div>
     </section>
 
-    <!-- MAPA COM LEGENDAS DE COR -->
-    <section class="bg-white rounded-2xl p-4 border border-slate-100 shadow-xs space-y-2">
-      <div id="incidentMap" class="w-full h-48 rounded-xl border overflow-hidden shadow-inner"></div>
-      <div class="flex gap-4 text-[10px] font-bold text-slate-500 px-1 pt-1 justify-start">
-        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-red-600"></span> 🦈 Incidente Tubarão</span>
-        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> ⚠️ Alerta / Corrente</span>
+    <!-- 2. MAPA OPERACIONAL COM TURISMO E SEGURANÇA -->
+    <section class="bg-white rounded-2xl p-4 border border-slate-100 shadow-xs space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+          <i data-lucide="map-pin" class="w-4 h-4 text-blue-600"></i> Mapa de Pontos Turísticos e Alertas
+        </h3>
+      </div>
+      <div id="incidentMap" class="w-full h-56 rounded-xl border border-slate-100 overflow-hidden shadow-inner"></div>
+      
+      <div id="popup" class="ol-popup">
+        <div id="popup-content"></div>
+      </div>
+
+      <!-- Legenda do Mapa -->
+      <div class="flex flex-wrap gap-3 text-[10px] font-bold text-slate-500 px-1 pt-1">
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span> 🏰 Turístico</span>
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-red-600"></span> 🦈 Risco Tubarão</span>
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> ⚠️ Corrente / Atenção</span>
       </div>
     </section>
 
-    <!-- CENTRAL DE NOTÍCIAS -->
+    <!-- 3. GOOGLE NEWS FEED REAL -->
     <section class="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs space-y-3">
       <div class="flex items-center justify-between border-b border-slate-100 pb-2">
         <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
-          <i data-lucide="newspaper" class="w-4 h-4 text-blue-600"></i> Alertas do Google em Tempo Real
+          <i data-lucide="newspaper" class="w-4 h-4 text-blue-600"></i> Notícias Recentes (Google News)
         </h3>
-        <span class="text-[9px] bg-red-50 text-red-600 font-bold px-2 py-0.5 rounded-sm uppercase">Live Feed</span>
+        <span class="text-[9px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-sm uppercase tracking-wide">Ao Vivo</span>
       </div>
-      <div id="newsListContainer" class="space-y-3 max-h-72 overflow-y-auto pr-1">
-        <p class="text-xs text-slate-400 text-center py-4">Buscando notícias no Google Alerts...</p>
+      
+      <div id="newsListContainer" class="space-y-3 max-h-64 overflow-y-auto pr-1">
+        <p class="text-xs text-slate-400 text-center py-4">Buscando notícias sobre maré e praias em PE...</p>
       </div>
     </section>
 
-    <!-- GRÁFICO MARÉ -->
+    <!-- 4. GRÁFICO DA ONDA DA MARÉ -->
     <section class="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs">
       <div class="flex items-center justify-between mb-3">
         <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
@@ -122,34 +195,93 @@
 
   </main>
 
+  <!-- BOTÃO FLUTUANTE DE GPS -->
   <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-xs px-4">
-    <button id="btnGpsTrack" class="w-full bg-amber-500 text-slate-950 font-black text-sm py-4 rounded-full shadow-xl flex items-center justify-center gap-2.5 uppercase border-2 border-white cursor-pointer transition-transform active:scale-95">
-      <i data-lucide="locate-fixed" class="w-5 h-5"></i> Monitorar via GPS
+    <button id="btnGpsTrack" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-sm py-4 rounded-full shadow-2xl shadow-amber-500/40 flex items-center justify-center gap-2.5 tracking-wide uppercase cursor-pointer border-2 border-white transition-all transform active:scale-95">
+      <i data-lucide="locate-fixed" class="w-5 h-5"></i> Monitorar Minha Praia via GPS
     </button>
   </div>
 
+  <!-- LÓGICA JAVASCRIPT -->
   <script>
     window.addEventListener('DOMContentLoaded', () => {
       lucide.createIcons();
 
       const beachData = {
-        'boa-viagem': { lat: -8.1130, lng: -34.8931, name: 'Boa Viagem', status: 'atencao', title: 'Maré Enchendo Agora', desc: 'A água está cobrindo a linha de arrecifes.', nextEvent: 'Alta: 15:42 (2.2m)', sharkRisk: 'Alto', currentHeight: '1.4m' },
-        'piedade': { lat: -8.1678, lng: -34.9157, name: 'Piedade', status: 'perigo', title: 'Área com Banho Restrito', desc: 'Risco crítico de incidentes com tubarões.', nextEvent: 'Alta: 15:40 (2.2m)', sharkRisk: 'Extremo', currentHeight: '1.4m' },
-        'olinda': { lat: -7.9892, lng: -34.8422, name: 'Olinda', status: 'seguro', title: 'Maré Baixa Estabilizada', desc: 'Condições ideais para caminhadas na areia.', nextEvent: 'Baixa: 21:50 (0.3m)', sharkRisk: 'Baixo', currentHeight: '0.4m' },
-        'paiva': { lat: -8.2323, lng: -34.9452, name: 'Cabo (Paiva)', status: 'atencao', title: 'Mar Aberto e Ondas Fortes', desc: 'Praia sem proteção de arrecifes.', nextEvent: 'Alta: 15:45 (2.1m)', sharkRisk: 'Moderado', currentHeight: '1.3m' }
+        'boa-viagem': { lat: -8.1130, lng: -34.8931, name: 'Boa Viagem', status: 'atencao', title: 'Maré Enchendo Agora', desc: 'A água está cobrindo a linha de arrecifes. Mantenha-se dentro da área rasa.', nextEvent: 'Alta: 15:42 (2.2m)', sharkRisk: 'Alto', currentHeight: '1.4m' },
+        'piedade': { lat: -8.1678, lng: -34.9157, name: 'Piedade', status: 'perigo', title: 'Área de Banho Restrito', desc: 'Proibição de banho profundo na Igrejinha devido ao alto índice de incidentes.', nextEvent: 'Alta: 15:40 (2.2m)', sharkRisk: 'Extremo', currentHeight: '1.4m' },
+        'olinda': { lat: -7.9892, lng: -34.8422, name: 'Olinda', status: 'seguro', title: 'Maré Baixa Estabilizada', desc: 'Ótima para caminhadas na orla e visita ao centro histórico.', nextEvent: 'Baixa: 21:50 (0.3m)', sharkRisk: 'Baixo', currentHeight: '0.4m' },
+        'paiva': { lat: -8.2323, lng: -34.9452, name: 'Praia do Paiva', status: 'atencao', title: 'Mar Aberto e Ondas Fortes', desc: 'Sem proteção de arrecifes. Correntes de repuxo intensas.', nextEvent: 'Alta: 15:45 (2.1m)', sharkRisk: 'Moderado', currentHeight: '1.3m' },
+        'porto-galinhas': { lat: -8.5066, lng: -35.0001, name: 'Porto de Galinhas', status: 'seguro', title: 'Piscinas Naturais Abertas', desc: 'Aproveite a maré baixa para passeios de jangada nas piscinas naturais.', nextEvent: 'Baixa: 11:10 (0.1m)', sharkRisk: 'Muito Baixo', currentHeight: '0.2m' },
+        'carneiros': { lat: -8.7058, lng: -35.0792, name: 'Praia de Carneiros', status: 'seguro', title: 'Águas Calmas e Mornas', desc: 'Excelente para banho em qualquer maré. Visite a Capela de São Benedito.', nextEvent: 'Baixa: 11:30 (0.2m)', sharkRisk: 'Baixo', currentHeight: '0.3m' },
+        'maria-farinha': { lat: -7.8383, lng: -34.8368, name: 'Maria Farinha', status: 'seguro', title: 'Águas Tranquilas e Náutica', desc: 'Ideal para esportes aquáticos e passeios de barco até a Coroa do Avião.', nextEvent: 'Alta: 16:00 (2.0m)', sharkRisk: 'Baixo', currentHeight: '0.5m' },
+        'itamaraca': { lat: -7.7472, lng: -34.8258, name: 'Ilha de Itamaracá', status: 'seguro', title: 'Praia do Forte Orange', desc: 'Mar calmo perto do Forte Orange e Projeto Peixe-Boi.', nextEvent: 'Alta: 16:10 (2.1m)', sharkRisk: 'Baixo', currentHeight: '0.6m' }
       };
+
+      const mapPoints = [
+        { lng: -34.8940, lat: -8.1135, type: 'tourist', title: '<b>Parque Dona Lindu</b><br>Espaço cultural e lazer em Boa Viagem.' },
+        { lng: -34.8475, lat: -8.0131, type: 'tourist', title: '<b>Centro Histórico de Olinda</b><br>Patrimônio Cultural da Humanidade.' },
+        { lng: -35.0001, lat: -8.5066, type: 'tourist', title: '<b>Piscinas Naturais de Porto de Galinhas</b><br>Passeio de jangada famoso.' },
+        { lng: -35.0725, lat: -8.7078, type: 'tourist', title: '<b>Igrejinha dos Carneiros</b><br>Capela histórica à beira-mar.' },
+        { lng: -34.8322, lat: -7.8130, type: 'tourist', title: '<b>Coroa do Avião</b><br>Banco de areia turístico próximo a Maria Farinha.' },
+        { lng: -34.8350, lat: -7.8030, type: 'tourist', title: '<b>Forte Orange</b><br>Fortaleza holandesa histórica em Itamaracá.' },
+        { lng: -34.8943, lat: -8.1172, type: 'shark', title: '<b>Trecho Acaiaca</b><br>Alerta para profundidade nas valas na maré alta.' },
+        { lng: -34.9161, lat: -8.1685, type: 'shark', title: '<b>Igrejinha de Piedade</b><br>Área crítica com restrição de banho de mar.' },
+        { lng: -34.9452, lat: -8.2323, type: 'warning', title: '<b>Praia do Paiva</b><br>Correntes de retorno fortes em mar aberto.' }
+      ];
 
       let tideChart = null, map = null, vectorSource = null, userFeature = null;
 
+      const popupContainer = document.getElementById('popup');
+      const popupContent = document.getElementById('popup-content');
+      const overlay = new ol.Overlay({
+        element: popupContainer,
+        autoPan: { animation: { duration: 250 } }
+      });
+
       function initMap() {
         vectorSource = new ol.source.Vector();
+
+        mapPoints.forEach(pt => {
+          const feature = new ol.Feature({
+            geometry: new ol.geom.Point(ol.proj.fromLonLat([pt.lng, pt.lat])),
+            title: pt.title
+          });
+
+          let color = '#2563eb';
+          if (pt.type === 'shark') color = '#dc2626';
+          if (pt.type === 'warning') color = '#d97706';
+
+          feature.setStyle(new ol.style.Style({
+            image: new ol.style.Circle({
+              radius: 7,
+              fill: new ol.style.Fill({ color: color }),
+              stroke: new ol.style.Stroke({ color: '#ffffff', width: 2 })
+            })
+          }));
+
+          vectorSource.addFeature(feature);
+        });
+
         map = new ol.Map({
           target: 'incidentMap',
           layers: [
-            new ol.layer.Tile({ source: new ol.source.OSM() }), 
+            new ol.layer.Tile({ source: new ol.source.OSM() }),
             new ol.layer.Vector({ source: vectorSource })
           ],
+          overlays: [overlay],
           view: new ol.View({ center: ol.proj.fromLonLat([-34.9000, -8.1200]), zoom: 11 })
+        });
+
+        // FIX DO BUG: forEachFeatureAtPixel no lugar de forEachFeatureAtIntersect
+        map.on('singleclick', function (evt) {
+          const feature = map.forEachFeatureAtPixel(evt.pixel, function (feat) { return feat; });
+          if (feature && feature.get('title')) {
+            popupContent.innerHTML = feature.get('title');
+            overlay.setPosition(evt.coordinate);
+          } else {
+            overlay.setPosition(undefined);
+          }
         });
       }
 
@@ -160,96 +292,55 @@
           if(data && data.current_weather) {
             document.getElementById('weatherTemp').innerText = `${Math.round(data.current_weather.temperature)}°C`;
             document.getElementById('weatherWind').innerText = `Vento: ${Math.round(data.current_weather.windspeed)} km/h`;
-            document.getElementById('weatherStatus').innerText = "Condições locais consultadas";
+            document.getElementById('weatherStatus').innerText = "Condições do momento";
           }
         } catch (e) { console.error(e); }
       }
 
-      // ─── ADICIONA PINOS DINÂMICOS NO MAPA BASEADO NO QUE FOI ENCONTRADO NO GOOGLE ALERTS ───
-      function plotDynamicPins(items, currentLat, currentLng) {
-        // Limpa pinos de incidentes anteriores, mantém apenas o do GPS se existir
-        vectorSource.getFeatures().forEach(f => {
-          if (f !== userFeature) vectorSource.removeFeature(f);
-        });
-
-        items.forEach((item, index) => {
-          const text = (item.title + " " + item.description).toLowerCase();
-          let color = '#d97706'; // Amarelo padrão para alertas gerais de maré/clima/afogamento
-
-          // Se a notícia falar de tubarão, o pino fica vermelho vivo
-          if (text.includes('tubarão') || text.includes('tubarao') || text.includes('ataque')) {
-            color = '#dc2626'; 
-          }
-
-          // Dispersão leve das coordenadas para os pinos não ficarem empilhados um em cima do outro
-          const shiftLat = currentLat + (index * 0.0015 - 0.001);
-          const shiftLng = currentLng + (index * 0.0015 - 0.001);
-
-          const pinFeature = new ol.Feature({
-            geometry: new ol.geom.Point(ol.proj.fromLonLat([shiftLng, shiftLat]))
-          });
-
-          pinFeature.setStyle(new ol.style.Style({
-            image: new ol.style.Circle({
-              radius: 7,
-              fill: new ol.style.Fill({ color: color }),
-              stroke: new ol.style.Stroke({ color: '#ffffff', width: 2 })
-            })
-          }));
-
-          vectorSource.addFeature(pinFeature);
-        });
-      }
-
-      async function fetchGoogleAlerts(beachKey) {
+      // FEED DE NOTÍCIAS REAL COM PROXY RSS ESTÁVEL (rss2json API)
+      async function fetchGoogleNewsFeed(beachName) {
         const listContainer = document.getElementById('newsListContainer');
-        const dataConfig = beachData[beachKey];
+        listContainer.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">Buscando notícias recentes...</p>';
 
-        // Link de RSS configurado
-        const googleAlertsRssUrl = "https://www.google.com/alerts/feeds/11490937676293588745/11786494344889835284"; 
-        const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(googleAlertsRssUrl)}`;
+        const searchQuery = encodeURIComponent(`praia ${beachName} pernambuco`);
+        const rssUrl = `https://news.google.com/rss/search?q=${searchQuery}&hl=pt-BR&gl=BR&ceid=BR:pt-419`;
+        const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`;
 
         try {
           const response = await fetch(apiUrl);
           const data = await response.json();
 
-          if (data.status === 'ok' && data.items.length > 0) {
+          if (data && data.status === 'ok' && data.items.length > 0) {
             listContainer.innerHTML = '';
             
-            data.items.forEach(item => {
+            data.items.slice(0, 4).forEach(item => {
               const cleanTitle = item.title.replace(/<\/?[^>]+(>|$)/g, "");
-              const cleanDesc = item.description.replace(/<\/?[^>]+(>|$)/g, "").substring(0, 140) + '...';
               const pubDate = new Date(item.pubDate).toLocaleDateString('pt-BR');
 
               const htmlCard = `
-                <div class="p-3 bg-slate-50 border border-slate-100 rounded-xl hover:bg-slate-100/70 transition-all">
+                <div class="p-3 bg-slate-50 border border-slate-100 rounded-xl hover:bg-slate-100/80 transition-colors">
                   <div class="flex items-center justify-between text-[10px] mb-1">
-                    <span class="font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-sm">🚨 NEWS FEED</span>
+                    <span class="font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-sm uppercase">Google News</span>
                     <span class="text-slate-400 font-medium">${pubDate}</span>
                   </div>
-                  <h4 class="text-xs text-slate-800 font-bold leading-snug">${cleanTitle}</h4>
-                  <p class="text-[11px] text-slate-600 mt-1">${cleanDesc}</p>
+                  <p class="text-xs text-slate-800 font-bold leading-tight">${cleanTitle}</p>
                   <div class="mt-2 text-right">
-                    <a href="${item.link}" target="_blank" rel="noopener" class="text-[11px] text-blue-600 font-bold hover:underline inline-flex items-center gap-0.5">
-                      Ver Fonte <i data-lucide="external-link" class="w-3 h-3"></i>
+                    <a href="${item.link}" target="_blank" rel="noopener noreferrer" class="text-[11px] text-blue-600 font-bold hover:underline inline-flex items-center gap-0.5">
+                      Ler no portal <i data-lucide="external-link" class="w-3 h-3"></i>
                     </a>
                   </div>
                 </div>
               `;
               listContainer.insertAdjacentHTML('beforeend', htmlCard);
             });
-
-            // Dispara o desenho dos alertas coletados no mapa
-            plotDynamicPins(data.items, dataConfig.lat, dataConfig.lng);
-
-          } else {
-            listContainer.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">Nenhum alerta recente nos servidores.</p>`;
+            lucide.createIcons();
+            return;
           }
+          listContainer.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">Nenhuma notícia recente encontrada para esta praia.</p>`;
         } catch (error) {
-          console.error("Erro ao carregar o Google Alerts:", error);
-          listContainer.innerHTML = `<p class="text-xs text-red-400 text-center py-4">Não foi possível processar o feed de notícias.</p>`;
+          console.error("Erro no feed de notícias:", error);
+          listContainer.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">Mantenha a atenção nas orientações dos salva-vidas na orla.</p>`;
         }
-        lucide.createIcons();
       }
 
       function updateDashboard(beachKey) {
@@ -263,24 +354,47 @@
         document.getElementById('currentHeightTag').innerText = `Altura: ${data.currentHeight}`;
 
         fetchWeather(data.lat, data.lng);
-        fetchGoogleAlerts(beachKey); // Busca os alertas focados na praia selecionada
+        fetchGoogleNewsFeed(data.name);
 
         const card = document.getElementById('statusCard');
         const tag = document.getElementById('statusTag');
+        const sharkText = document.getElementById('sharkRiskText');
+        const sharkIconBox = document.getElementById('sharkIconContainer');
+
         card.className = "rounded-2xl p-5 border transition-all duration-300 shadow-xs ";
         tag.className = "text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-md ";
 
-        if (data.status === 'seguro') { card.classList.add('bg-emerald-50', 'border-emerald-200'); tag.classList.add('bg-emerald-500', 'text-white'); tag.innerText = '✓ Seguro'; }
-        else if (data.status === 'atencao') { card.classList.add('bg-amber-50', 'border-amber-200'); tag.classList.add('bg-amber-500', 'text-white'); tag.innerText = '⚠️ Atenção'; }
-        else if (data.status === 'perigo') { card.classList.add('bg-red-50', 'border-red-200'); tag.classList.add('bg-red-500', 'text-white'); tag.innerText = '🚨 Risco Crítico'; }
+        if (data.status === 'seguro') {
+          card.classList.add('bg-emerald-50', 'border-emerald-200');
+          tag.classList.add('bg-emerald-500', 'text-white');
+          tag.innerText = '✓ Seguro para Banho';
+          sharkText.className = "font-bold text-base block mt-0.5 text-emerald-600";
+          sharkIconBox.className = "p-2 rounded-lg bg-emerald-100 text-emerald-600";
+        } else if (data.status === 'atencao') {
+          card.classList.add('bg-amber-50', 'border-amber-200');
+          tag.classList.add('bg-amber-500', 'text-white');
+          tag.innerText = '⚠️ Atenção Redobrada';
+          sharkText.className = "font-bold text-base block mt-0.5 text-amber-600";
+          sharkIconBox.className = "p-2 rounded-lg bg-amber-100 text-amber-600";
+        } else if (data.status === 'perigo') {
+          card.classList.add('bg-red-50', 'border-red-200');
+          tag.classList.add('bg-red-500', 'text-white');
+          tag.innerText = '🚨 Banho Restrito';
+          sharkText.className = "font-bold text-base block mt-0.5 text-red-600";
+          sharkIconBox.className = "p-2 rounded-lg bg-red-100 text-red-600";
+        }
 
         renderChart(data.status);
-        if (map) { map.getView().animate({ center: ol.proj.fromLonLat([data.lng, data.lat]), zoom: 14, duration: 1000 }); }
+
+        if (map) {
+          map.getView().animate({ center: ol.proj.fromLonLat([data.lng, data.lat]), zoom: 13, duration: 1000 });
+        }
       }
 
       function renderChart(status) {
         const ctx = document.getElementById('tideChart').getContext('2d');
         if (tideChart) tideChart.destroy();
+
         let lineColor = status === 'perigo' ? '#dc2626' : (status === 'atencao' ? '#d97706' : '#2563eb');
         const labels = Array.from({length: 24}, (_, i) => `${String(i).padStart(2, '0')}:00`);
         const dataPoints = labels.map((_, i) => Math.sin((i - 6) * 0.5) * 1 + 1.2); 
@@ -300,20 +414,49 @@
       }
 
       document.getElementById('btnGpsTrack').addEventListener('click', () => {
+        const alertBox = document.getElementById('gpsAlertBox');
+        const alertText = document.getElementById('gpsAlertText');
+
         if (!("geolocation" in navigator)) return;
+
+        alertText.innerText = "Buscando localização por satélite...";
+        alertBox.classList.remove('hidden');
+
         navigator.geolocation.getCurrentPosition((position) => {
           const userLng = position.coords.longitude;
           const userLat = position.coords.latitude;
           const userCoords = ol.proj.fromLonLat([userLng, userLat]);
 
-          if (userFeature) userFeature.getGeometry().setCoordinates(userCoords);
-          else {
+          if (userFeature) {
+            userFeature.getGeometry().setCoordinates(userCoords);
+          } else {
             userFeature = new ol.Feature({ geometry: new ol.geom.Point(userCoords) });
-            userFeature.setStyle(new ol.style.Style({ image: new ol.style.Circle({ radius: 9, fill: new ol.style.Fill({ color: '#3b82f6' }), stroke: new ol.style.Stroke({ color: '#ffffff', width: 3 }) }) }));
+            userFeature.setStyle(new ol.style.Style({
+              image: new ol.style.Circle({
+                radius: 9,
+                fill: new ol.style.Fill({ color: '#3b82f6' }),
+                stroke: new ol.style.Stroke({ color: '#ffffff', width: 3 })
+              })
+            }));
             vectorSource.addFeature(userFeature);
           }
+
           map.getView().animate({ center: userCoords, zoom: 15, duration: 1000 });
-        });
+
+          const distancePiedade = Math.sqrt(Math.pow(userLng - (-34.9157), 2) + Math.pow(userLat - (-8.1678), 2));
+          if (distancePiedade < 0.02) {
+            document.getElementById('locationSelect').value = 'piedade';
+            updateDashboard('piedade');
+            alertBox.className = "bg-red-600 text-white p-4 rounded-xl shadow-md flex items-start gap-3";
+            alertText.innerHTML = "<strong>PERIGO!</strong> Você está na Praia de Piedade. Banho de mar restrito devido ao risco crítico de tubarões.";
+          } else {
+            alertBox.className = "bg-emerald-600 text-white p-4 rounded-xl shadow-md flex items-start gap-3";
+            alertText.innerHTML = "Localização identificada! Acompanhe as condições da maré e recomendações da orla.";
+          }
+        }, () => {
+          alertBox.classList.add('hidden');
+          alert("Permita a geolocalização no navegador para usar esta função.");
+        }, { enableHighAccuracy: true });
       });
 
       document.getElementById('locationSelect').addEventListener('change', (e) => updateDashboard(e.target.value));
